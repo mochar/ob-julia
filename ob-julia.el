@@ -466,8 +466,8 @@ If session should not be used, return nil.
   ;; starting a session by default in Julia.
   (let* ((session (alist-get :session params))
          (name (cond
-                ;; ((null session) ob-julia-default-session-name)
-                ((null session) (substring julia-snail-repl-buffer 1 -1))
+                ((null session) ob-julia-default-session-name)
+                ;; ((null session) (substring julia-snail-repl-buffer 1 -1))
                 ((string-equal session "none") nil)
                 (t session))))
     (when name
@@ -575,7 +575,7 @@ Please submit a bug report!")
 
 (defun org-babel-julia-initiate-session (session params &optional backend)
   "If there is not a current julia process then create one."
-  (or (org-babel-julia--get-live-session session)
+  (or (org-babel-julia--get-live-session (or session ob-julia-default-session-name))
       (unless (equal session "none")
         (org-babel-julia-prep-session (or backend org-babel-julia-backend)
                                       session params))))

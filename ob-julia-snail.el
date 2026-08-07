@@ -8,6 +8,9 @@
 (declare-function julia-snail--request-tracker-display-error-buffer-on-failure? "julia-snail")
 (declare-function julia-snail--request-tracker-tmpfile "julia-snail")
 
+(defvar ob-julia-snail-port-counter 10050
+  "Counter for dynamically allocating Snail ports.")
+
 (cl-defmethod org-babel-julia-prepare-format-call
     ((_ (eql 'julia-snail)) src-file out-file params &optional uuid)
   "Format a call to OrgBabelEval
@@ -22,27 +25,34 @@ the startup script."
 
 (cl-defmethod org-babel-julia-prep-session ((_ (eql 'julia-snail)) session params)
   "Prepare SESSION according to the header arguments specified in PARAMS."
-  (let ((dir (or (alist-get :dir params)
-		 default-directory))
-        (repl-buffer
-         (org-babel-julia-get-session-name params)))
+  (let ((dir (or (alist-get :dir params) default-directory))
+        (repl-buffer (org-babel-julia-get-session-name params)))
     (save-window-excursion
-      (setq-local julia-snail-repl-buffer repl-buffer)
-      (julia-snail)
+
+      ;; Only spawn a new Snail process if the REPL buffer doesn't already exist
+      (unless (get-buffer repl-buffer)
+        (setq ob-julia-snail-port-counter (1+ ob-julia-snail-port-counter))
+        (with-temp-buffer
+          (setq default-directory dir)
+          ;; Prevent julia-snail from crashing when checking file-remote-p
+          (setq buffer-file-name (or (buffer-file-name) (expand-file-name "dummy.org" dir)))
+          (setq-local julia-snail-repl-buffer repl-buffer)
+          (setq-local julia-snail-port ob-julia-snail-port-counter)
+          (julia-snail)))
+      
       (message "Loading ObJulia...")
       (julia-snail--send-to-server
-        ;; '("JuliaSnail" "Extensions")
         '("Main")
         (format "include(\"%s\")" ob-julia-startup-script)
-        :repl-buf repl-buffer
+        :repl-buf (get-buffer repl-buffer)
         :async nil)
       (message "Loading ObJulia... done")
-      julia-snail-repl-buffer)))
+      repl-buffer)))
 
 (cl-defmethod org-babel-julia--get-live-session
   (session &context (org-babel-julia-backend (eql 'julia-snail)))
   (and-let*
-      ((repl-buffer (get-buffer julia-snail-repl-buffer)) 
+      ((repl-buffer (get-buffer session)) 
        ((buffer-live-p repl-buffer))
        ((buffer-local-value 'julia-snail-repl-mode repl-buffer)))
     repl-buffer))
