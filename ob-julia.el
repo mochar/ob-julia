@@ -145,6 +145,7 @@ equivalents."
                      (list
                       (param->julia :dir)
                       (param->julia :results)
+                      (param->julia :module "target_module") ; module is reserved
                       ;; Optional arguments.  We pass them all and let
                       ;; julia decide what to do
                       (param->julia :latexify)

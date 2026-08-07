@@ -70,7 +70,10 @@ defaults to the current directory.
 
 TODO: The output will be printed to a display with mime type
 `mime`."""
-function org_eval(src, output_stream, dir=pwd(), catch_errors=true) #, mime=MIMES[""])
+function org_eval(src, output_stream, dir=pwd(), catch_errors=true, mod_name="Main") #, mime=MIMES[""])
+    # Resolve the target module in the latest world age
+    target_mod = Base.invokelatest(getfield, Main, Symbol(mod_name))
+    
     # Meta.parse parses only one expression, so we wrap the code in a
     # block.  It can either be a let block or a begin block.
     return cd(expanduser(dir)) do
@@ -80,7 +83,7 @@ function org_eval(src, output_stream, dir=pwd(), catch_errors=true) #, mime=MIME
             redirect_stdout(output_stream) do
                 redirect_stderr(output_stream) do
                     try
-                        (true, Base.include_string(Main, read(src, String)))
+                        (true, Base.include_string(target_mod, read(src, String)))
                     catch e
                         # There's an evaluation error, store it both
                         # as output and return as result
@@ -167,9 +170,12 @@ function OrgBabelEval(src_file, output_file, params, async_uuid=nothing;
     # Create a new output file where Julia will store its results in
     # the same dir where ob-julia expect its ouput file
     temporary_output, temporary_stream = safe_mktemp(output_file)
+    
     # Parse the params (named tuple passed by ob-julia)
     params = Main.eval(Meta.parse(params))
     latexify = something(params[:latexify], "nil") != "nil"
+    target_mod = params[:target_module] === nothing ? "Main" : string(params[:target_module])
+    
     # If results is output, running the code will start writing data
     # directly on the output file.  That's ok, but we need to tell
     # ob-julia the way this data is formatted.  We have no idea, so
@@ -178,7 +184,9 @@ function OrgBabelEval(src_file, output_file, params, async_uuid=nothing;
     if result_is_output(params)
         println(temporary_stream, "raw")
     end
-    success, result = org_eval(src_file, temporary_stream, working_dir(params), catch_errors)
+    
+    success, result = org_eval(src_file, temporary_stream, working_dir(params), catch_errors, target_mod)
+    
     # Now the code has been executed and imports have been imported.
     # We can reload supported display function so maybe one of them will be used
     OrgBabelReload()
