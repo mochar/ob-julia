@@ -12,7 +12,7 @@ const supported_packages = [
     :LinearAlgebra,
     :DataFrames,
     :Latexify, :LaTeXStrings,
-    :Gadfly, :Plots, :Makie]
+    :Gadfly, :Plots, :Makie, :CairoMakie, :GLMakie, :WGLMakie]
 
 const package_mimes =
     Dict(:Plots => MIME.(["image/gif",
@@ -32,7 +32,10 @@ const package_mimes =
                      "application/pdf",
                      "application/postscript",
                      "image/eps",
-                     "text/html"]))
+                         "text/html"]),
+        :GLMakie => MIME.(["image/png"]),
+        :WGLMakie => MIME.(["text/html"])
+    )
 
 
 "Call define_\$pkg function."
@@ -169,3 +172,7 @@ function define_Makie()
     @eval display(d::ObJuliaDisplay, mime::MIME"text/org", p::Main.Makie.Figure; kwargs...) =
         (verbatim(d); show(d.io, MIME("text/plain"), p))
 end
+
+function define_CairoMakie() define_Makie() end
+function define_GLMakie() define_Makie() end
+function define_WGLMakie() define_Makie() end
