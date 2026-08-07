@@ -469,7 +469,7 @@ If session should not be used, return nil.
                 ((null session) ob-julia-default-session-name)
                 ;; ((null session) (substring julia-snail-repl-buffer 1 -1))
                 ((string-equal session "none") nil)
-                (t session))))
+                (t (concat "julia " session)))))
     (when name
       (maybe-earmuff-session-name name))))
 
