@@ -22,7 +22,8 @@ lst(x) = wrap(join(lisp.(x), " "))
 lst(s::AbstractString) = wrap(lisp(s))
 
 sexp(t::Tuple) = lst(t)
-sexp(a::AbstractVector) = wrap(join(wrap.(lisp.(stringify.(a))), " "))
+# sexp(a::AbstractVector) = wrap(join(wrap.(lisp.(stringify.(a))), " "))
+sexp(a::AbstractVector) = wrap(join(lisp.(a), " "))
 sexp(a::AbstractMatrix) =
     wrap(join([wrap(join(ObJulia.lisp.(ObJulia.stringify.(r)), " "))
                for r in eachrow(a)], " "))

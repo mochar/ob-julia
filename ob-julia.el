@@ -373,15 +373,19 @@ variables `org-babel-julia-force-latex-environment' and
   "Assign VALUE to a variable called NAME."
   (format "%s = %S" name value))
 
-(defun org-babel-julia-assign-to-array (name matrix)
-  "Create a Julia Matrix (Vector{Any ,2}) from MATRIX and assign
+(defun org-babel-julia-assign-to-array (name array)
+  "Create a Julia Array or Matrix (Vector{Any ,2}) from ARRAY and assign
 it to NAME."
   (format "%s = [%s]" name
-	  (mapconcat (lambda (line)
-                       (mapconcat (lambda (e)
-				    (format "%S" e))
-				  line " "))
-                     matrix ";")))
+          (if (not (listp (car array)))
+              ;; Vector
+              (mapconcat (lambda (e) (format "%S" e)) array ", ")
+            ;; Array
+	    (mapconcat (lambda (line)
+                         (mapconcat (lambda (e)
+				      (format "%S" e))
+				    line " "))
+                       array ";"))))
 
 (defun org-babel-julia-assign-to-var-or-array (var)
   "Assign an org variable as a Julia variable or array."
