@@ -12,7 +12,7 @@ const supported_packages = [
     :LinearAlgebra,
     :DataFrames,
     :Latexify, :LaTeXStrings,
-    :Gadfly, :Plots]
+    :Gadfly, :Plots, :Makie]
 
 const package_mimes =
     Dict(:Plots => MIME.(["image/gif",
@@ -26,7 +26,13 @@ const package_mimes =
          :GadFly => MIME.(["application/postscript",
                      "application/pdf",
                      "image/png",
-                     "image/svg+xml"]))
+                           "image/svg+xml"]),
+        :Makie => MIME.(["image/png",
+                     "image/svg+xml",
+                     "application/pdf",
+                     "application/postscript",
+                     "image/eps",
+                     "text/html"]))
 
 
 "Call define_\$pkg function."
@@ -140,5 +146,26 @@ function define_Plots()
                  MIME"image/eps", MIME"application/x-tex", MIME"text/html", MIME"image/gif"}}=
                      show(d.io, mime, p)
     @eval display(d::ObJuliaDisplay, mime::MIME"text/org", p::Main.Plots.Plot; kwargs...) =
+        (verbatim(d); show(d.io, MIME("text/plain"), p))
+end
+
+
+function define_Makie()
+    # Support for standard Makie outputs (png, svg, pdf, etc.) for both Figure and FigureAxisPlot
+    @eval display(d::ObJuliaDisplay, mime::M, p::Main.Makie.FigureAxisPlot; kwargs...) where
+    { M <: Union{MIME"image/png", MIME"image/svg+xml", MIME"application/pdf", MIME"application/postscript",
+                 MIME"image/eps", MIME"text/html"}}=
+                     show(d.io, mime, p)
+                     
+    @eval display(d::ObJuliaDisplay, mime::M, p::Main.Makie.Figure; kwargs...) where
+    { M <: Union{MIME"image/png", MIME"image/svg+xml", MIME"application/pdf", MIME"application/postscript",
+                 MIME"image/eps", MIME"text/html"}}=
+                     show(d.io, mime, p)
+
+    # Fallback to org verbatim text if no graphical MIME is requested
+    @eval display(d::ObJuliaDisplay, mime::MIME"text/org", p::Main.Makie.FigureAxisPlot; kwargs...) =
+        (verbatim(d); show(d.io, MIME("text/plain"), p))
+        
+    @eval display(d::ObJuliaDisplay, mime::MIME"text/org", p::Main.Makie.Figure; kwargs...) =
         (verbatim(d); show(d.io, MIME("text/plain"), p))
 end
