@@ -1,3 +1,5 @@
+;; -*- lexical-binding: t -*-
+
 (require 'ob-julia)
 (require 'julia-snail nil t)
 
@@ -32,13 +34,28 @@ the startup script."
       ;; Only spawn a new Snail process if the REPL buffer doesn't already exist
       (unless (get-buffer repl-buffer)
         (setq ob-julia-snail-port-counter (1+ ob-julia-snail-port-counter))
-        (with-temp-buffer
-          (setq default-directory dir)
-          ;; Prevent julia-snail from crashing when checking file-remote-p
-          (setq buffer-file-name (or (buffer-file-name) (expand-file-name "dummy.org" dir)))
-          (setq-local julia-snail-repl-buffer repl-buffer)
-          (setq-local julia-snail-port ob-julia-snail-port-counter)
-          (julia-snail)))
+
+        ;; Julia-snail stores a buffer-local var in the repl buffer named
+        ;; julia-snail--repl-go-back-target that points to the buffer where the
+        ;; repl was created. Since it is assumed that this buffer is alive in
+        ;; various places in julia-snail (namely when creating multimedia
+        ;; buffer), we generate a hidden buffer for it, and kill it when the
+        ;; repl is killed.
+        (let ((origin-buf (generate-new-buffer (format " *ob-julia-origin-%s*" repl-buffer))))
+          (with-current-buffer origin-buf
+            (setq default-directory dir)
+            ;; Prevent julia-snail from crashing when checking file-remote-p
+            (setq buffer-file-name (or (buffer-file-name) (expand-file-name "dummy.org" dir)))
+            (setq-local julia-snail-repl-buffer repl-buffer)
+            (setq-local julia-snail-port ob-julia-snail-port-counter)
+            (julia-snail))
+
+          (with-current-buffer (get-buffer repl-buffer)
+            (add-hook 'kill-buffer-hook
+                      (lambda ()
+                        (when (buffer-live-p origin-buf)
+                          (kill-buffer origin-buf)))
+                      nil t))))
       
       (message "Loading ObJulia...")
       (julia-snail--send-to-server
