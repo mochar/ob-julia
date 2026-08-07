@@ -54,6 +54,7 @@ the startup script."
               (julia-snail--send-to-server
                 '("Main")
                 OrgBabelEval-call
+                :repl-buf session
                 :async nil
                 :display-error-buffer-on-failure? t)))
     ;; Rename the output file heuristically by mime-type
@@ -69,6 +70,7 @@ the startup script."
          (julia-snail--send-to-server
            '("Main") ;TODO: Use `julia-snail--module-at-point'
            OrgBabelEval-call
+           :repl-buf session
            :async t
            :display-error-buffer-on-failure? t
            :callback-success #'org-babel-julia-snail-success-callback
