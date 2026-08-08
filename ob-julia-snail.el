@@ -74,6 +74,29 @@ the startup script."
        ((buffer-local-value 'julia-snail-repl-mode repl-buffer)))
     repl-buffer))
 
+(defun org-babel-julia-snail--ensure-module (session params)
+  "Prompt to create the module specified in PARAMS if it does not exist."
+  (let ((module (alist-get :module params)))
+    (when (and module (not (string= module "Main")) (not (string= module "none")))
+      (let* ((repl-buffer (get-buffer session))
+             ;; Query Snail synchronously to see if the module exists.
+             ;; Returns t if exists, otherwise returns :nothing 
+             (exists (julia-snail--send-to-server
+                       :Main
+                       (format "isdefined(Main, :%s) && isa(getfield(Main, :%s), Module)" module module)
+                       :repl-buf repl-buffer
+                       :async nil)))
+        (unless (eq exists t) ; Explicit because returns :nothing if not exists
+          (if (yes-or-no-p (format "Module '%s' does not exist in Main. Create it? " module))
+              ;; Create the module synchronously
+              (julia-snail--send-to-server
+                :Main
+                (format "module %s end" module)
+                :repl-buf repl-buffer
+                :async nil)
+            ;; Abort execution if the user says no
+            (user-error "Evaluation aborted: Module '%s' does not exist." module)))))))
+
 (cl-defmethod org-babel-julia-evaluate-in-session:sync
   ((_ (eql 'julia-snail)) session OrgBabelEval-call _ output-file params)
   "Run ORGBABELEVAL-CALL in session SESSION synchronously with julia-snail."
@@ -93,6 +116,7 @@ the startup script."
 (cl-defmethod org-babel-julia-evaluate-in-session:async
   ((_ (eql 'julia-snail)) session uuid OrgBabelEval-call _ output properties)
   "Run ORGBABELEVAL-CALL in session SESSION asynchronously with julia-snail."
+  (org-babel-julia-snail--ensure-module session (car properties))
   (let ((reqid 
          (julia-snail--send-to-server
            '("Main") ;TODO: Use `julia-snail--module-at-point'
