@@ -10,7 +10,7 @@
 (declare-function julia-snail--request-tracker-display-error-buffer-on-failure? "julia-snail")
 (declare-function julia-snail--request-tracker-tmpfile "julia-snail")
 
-(defvar ob-julia-snail-port-counter 10050
+(defvar org-babel-julia-snail-port-counter 10050
   "Counter for dynamically allocating Snail ports.")
 
 (cl-defmethod org-babel-julia-prepare-format-call
@@ -33,7 +33,7 @@ the startup script."
 
       ;; Only spawn a new Snail process if the REPL buffer doesn't already exist
       (unless (get-buffer repl-buffer)
-        (setq ob-julia-snail-port-counter (1+ ob-julia-snail-port-counter))
+        (setq org-babel-julia-snail-port-counter (1+ org-babel-julia-snail-port-counter))
 
         ;; Julia-snail stores a buffer-local var in the repl buffer named
         ;; julia-snail--repl-go-back-target that points to the buffer where the
@@ -47,7 +47,7 @@ the startup script."
             ;; Prevent julia-snail from crashing when checking file-remote-p
             (setq buffer-file-name (or (buffer-file-name) (expand-file-name "dummy.org" dir)))
             (setq-local julia-snail-repl-buffer repl-buffer)
-            (setq-local julia-snail-port ob-julia-snail-port-counter)
+            (setq-local julia-snail-port org-babel-julia-snail-port-counter)
             (julia-snail))
 
           (with-current-buffer (get-buffer repl-buffer)
@@ -183,5 +183,90 @@ Unless an output file is explicitly specified with the header arg
 (defun org-babel-julia-snail-failure-callback (request-info)
   (when-let ((tmpfile (julia-snail--request-tracker-tmpfile request-info)))
     (and (file-exists-p tmpfile) (delete-file tmpfile))))
+
+;;; Org interaction
+
+(defun org-babel-julia--session-and-module-at-point (&optional info)
+  (when-let* ((info (or info (org-babel-get-src-block-info 'no-eval)))
+              (_ (string-equal (nth 0 info) "julia"))
+              (params (nth 2 info))
+              (session (org-babel-julia-get-session-name params)))
+    (cons session (alist-get :module params))))
+
+(defun org-babel-julia-doc-lookup ()
+  (interactive)
+  (pcase-let* ((`(,session . ,module) (org-babel-julia--session-and-module-at-point))
+               (julia-snail-repl-buffer session))
+    (call-interactively #'julia-snail-doc-lookup)))
+
+(defun org-babel-julia--src-setup ()
+  (when (and (eq major-mode 'julia-mode)
+             (boundp 'org-src--babel-info))
+    (pcase-let* ((`(,session . ,module) (org-babel-julia--session-and-module-at-point org-src--babel-info)))
+      (setq-local julia-snail-repl-buffer session))))
+
+(defvar-keymap org-babel-julia-mode-map
+  :doc "Keymap for org-babel-julia-mode."
+  "M-i" #'org-babel-julia-doc-lookup)
+  
+
+(define-minor-mode org-babel-julia-mode
+  "Minor mode for interacting with a Julia REPL from an `org-mode' buffer."
+  :group 'org-babel-julia
+  :init-value nil
+  :keymap org-babel-julia-mode-map
+  (cond
+   (org-babel-julia-mode
+    (add-hook 'after-revert-hook 'org-babel-julia-mode nil t)
+    ;; (add-hook 'completion-at-point-functions 'jupyter-org-completion-at-point nil t)
+    (add-hook 'org-src-mode-hook 'org-babel-julia--src-setup)
+    )
+   (t
+    (remove-hook 'after-revert-hook 'org-babel-julia-mode t)
+    ;; (remove-hook 'completion-at-point-functions 'jupyter-org-completion-at-point t)
+    (remove-hook 'org-src-mode-hook 'org-babel-julia--src-setup)
+    )))
+
+;;; Override module-at-point
+
+;; We allow code blocks to be evaluated within modules using the :module
+;; param. For julia-snail to be aware of this, we replace its `module-at-point'
+;; function with one that first checks if we are in Org-mode or an Org-src
+;; buffer.
+
+(defun org-babel-julia-snail--module-at-point-advice (orig-fun &optional partial-module)
+  "Advice for `julia-snail--module-at-point` to support Org Babel and ephemeral buffers."
+  (let* ((base-module
+          (cond
+           ;; Inside org-edit-special (C-c ')
+           ((bound-and-true-p org-src-mode)
+            (when-let* ((info (bound-and-true-p org-src--babel-info))
+                        (params (nth 2 info)))
+              (alist-get :module params)))
+           
+           ;; Inside an inline org-mode julia block
+           ((eq major-mode 'org-mode)
+            (cdr (org-babel-julia--session-and-module-at-point)))
+           
+           ;; Fallback sentinel
+           (t :use-orig))))
+    
+    (if (eq base-module :use-orig)
+        ;; We are outside of Org. Delegate to the original function.
+        ;; We still check for a file name to prevent the `expand-file-name` crash.
+        (if (buffer-file-name (buffer-base-buffer))
+            (funcall orig-fun partial-module)
+          (or partial-module '("Main")))
+      
+      ;; Org context intercepted: build the namespace from the block header
+      (or (if base-module
+              (append `(,base-module) partial-module)
+            partial-module)
+          '("Main")))))
+
+;; Apply the advice
+(advice-add 'julia-snail--module-at-point :around #'org-babel-julia-snail--module-at-point-advice)
+
+;;; Footer
 
 (provide 'ob-julia-snail)
